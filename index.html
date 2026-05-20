@@ -592,8 +592,15 @@
      ※ 관리자 비밀번호 변경:
         아래 ADMIN_PASSWORD 값을 수정하세요.
         기본값: komir2026
+
+     ※ Google Sheets 자동 저장 설정:
+        아래 GAS_WEBAPP_URL 값을 본인의 Google Apps Script
+        웹 앱 URL로 교체하세요. 빈 문자열이면 시트 저장은 비활성화되고
+        localStorage에만 저장됩니다.
+        예: const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbx....../exec';
      =========================================== */
   const ADMIN_PASSWORD = 'komir2026';
+  const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbycLKGPBmog-Kdo9aqOdWIA8XpgUxBAGmeHdz7WUuBfU5tsNF8jUFpDWnCL1WjOGpB3MA/exec';
   const STORAGE_KEY = 'komir_ai_ethics_submissions';
 
   const items = [
@@ -698,9 +705,10 @@
       return;
     }
     const yesCount = state.answers.filter(a=>a==='yes').length;
+    const rate = Math.round(yesCount/items.length*100);
     const now = new Date();
 
-    // SAVE TO LOCALSTORAGE
+    // SAVE TO LOCALSTORAGE (관리자 모드용 백업)
     const submission = {
       id: now.getTime(),
       dept: state.dept,
@@ -709,11 +717,29 @@
       submittedAt: now.toISOString(),
       answers: items.map((it,i)=>({ key: it.key, value: state.answers[i] })),
       yesCount: yesCount,
-      totalCount: items.length
+      totalCount: items.length,
+      rate: rate
     };
     const all = loadSubmissions();
     all.push(submission);
     saveSubmissions(all);
+
+    // SEND TO GOOGLE SHEETS (설정된 경우에만)
+    if(GAS_WEBAPP_URL && GAS_WEBAPP_URL.startsWith('https://')){
+      const payload = {
+        ...submission,
+        userAgent: navigator.userAgent
+      };
+      // no-cors 모드로 전송 (CORS 우회). 응답 확인 불가하지만 전송은 됨.
+      fetch(GAS_WEBAPP_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => {
+        console.warn('Google Sheets 전송 실패 (localStorage에는 저장됨):', err);
+      });
+    }
 
     document.getElementById('sumName').textContent = `${state.dept} / ${state.name}`;
     document.getElementById('sumEmp').textContent = state.empno;
